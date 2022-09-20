@@ -9,15 +9,22 @@ import UIKit
 
 class TodoListViewController: UITableViewController {
     
-    
-    private let defaults = UserDefaults.standard
+    private let dataFilePath = FileManager.default
+        .urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
     private var itemArray = [Item]()
     
     override func viewDidLoad() {
         super.viewDidLoad()
-                
-        if let itemsData = defaults.data(forKey: "TodoListArray") {
-            itemArray = (try? PropertyListDecoder().decode([Item].self, from: itemsData)) ?? []
+        loadItems()
+    }
+    
+    private func loadItems() {
+        if let data = try? Data(contentsOf: dataFilePath!) {
+            do {
+                itemArray = try PropertyListDecoder().decode([Item].self, from: data)
+            } catch {
+                print("Error obtaining the items")
+            }
         }
     }
     
@@ -40,6 +47,7 @@ class TodoListViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         itemArray[indexPath.row].isDone.toggle()
         tableView.reloadRows(at: [indexPath], with: .fade)
+        saveItems()
     }
     
     
@@ -57,13 +65,21 @@ class TodoListViewController: UITableViewController {
         let action = UIAlertAction(title: "Add Item", style: .default) { action in
             self.itemArray.append(Item(title: textField.text!))
             
-            let encodedItems = (try? PropertyListEncoder().encode(self.itemArray)) ?? Data()
-            self.defaults.set(encodedItems, forKey: "TodoListArray")
+            self.saveItems()
             
             self.tableView.reloadData()
         }
         
         alert.addAction(action)
         present(alert, animated: true)
+    }
+    
+    private func saveItems() {
+        do {
+            let itemsData = try PropertyListEncoder().encode(itemArray)
+            try itemsData.write(to: dataFilePath!)
+        } catch {
+            print("Could not save data")
+        }
     }
 }
