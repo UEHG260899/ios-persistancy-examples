@@ -11,12 +11,13 @@ class TodoListViewController: UITableViewController {
     
     
     private let defaults = UserDefaults.standard
-    private var itemArray = ["Find Mike", "Buy eggs", "Destroy Demogorgon"]
+    private var itemArray = [Item]()
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        if let items = defaults.array(forKey: "TodoListArray") as? [String] {
-            itemArray = items
+                
+        if let itemsData = defaults.data(forKey: "TodoListArray") {
+            itemArray = (try? PropertyListDecoder().decode([Item].self, from: itemsData)) ?? []
         }
     }
     
@@ -27,14 +28,18 @@ class TodoListViewController: UITableViewController {
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        
         let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
-        cell.textLabel?.text = itemArray[indexPath.row]
+        cell.textLabel?.text = itemArray[indexPath.row].title
+        cell.accessoryType = itemArray[indexPath.row].isDone ? .checkmark : .none
+        cell.selectionStyle = .none
         return cell
+        
     }
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        tableView.cellForRow(at: indexPath)?.accessoryType = (tableView.cellForRow(at: indexPath)?.accessoryType == .checkmark) ? .none : .checkmark
-        tableView.deselectRow(at: indexPath, animated: true)
+        itemArray[indexPath.row].isDone.toggle()
+        tableView.reloadRows(at: [indexPath], with: .fade)
     }
     
     
@@ -50,8 +55,11 @@ class TodoListViewController: UITableViewController {
         }
         
         let action = UIAlertAction(title: "Add Item", style: .default) { action in
-            self.itemArray.append(textField.text!)
-            self.defaults.set(self.itemArray, forKey: "TodoListArray")
+            self.itemArray.append(Item(title: textField.text!))
+            
+            let encodedItems = (try? PropertyListEncoder().encode(self.itemArray)) ?? Data()
+            self.defaults.set(encodedItems, forKey: "TodoListArray")
+            
             self.tableView.reloadData()
         }
         
