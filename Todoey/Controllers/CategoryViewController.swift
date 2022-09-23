@@ -6,40 +6,32 @@
 //
 
 import UIKit
-import CoreData
+import RealmSwift
 
 class CategoryViewController: UITableViewController {
     
-    private let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
-    private var categories = [CategoryCD]()
+    private let realm = try! Realm()
+    private var categories: Results<Category>?
     
     override func viewDidLoad() {
         super.viewDidLoad()
         loadCategories()
     }
     
-    private func loadCategories(predicate: NSPredicate? = nil, sortDescriptors: [NSSortDescriptor]? = nil) {
-        let request: NSFetchRequest<CategoryCD> = CategoryCD.fetchRequest()
-        request.predicate = predicate
-        request.sortDescriptors = sortDescriptors
-        
-        do {
-            categories = try context.fetch(request)
-        } catch {
-            print("Error fetching categories")
-        }
+    private func loadCategories() {
+        categories = realm.objects(Category.self)
     }
     
 
     
     // MARK: - DataSource
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        categories.count
+        categories?.count ?? 0
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "CategoryCell", for: indexPath)
-        cell.textLabel?.text = categories[indexPath.row].name
+        cell.textLabel?.text = categories?[indexPath.row].name
         cell.accessoryType = .disclosureIndicator
         return cell
     }
@@ -54,7 +46,7 @@ class CategoryViewController: UITableViewController {
         let destionationVC = segue.destination as! TodoListViewController
         
         if let indexPath = tableView.indexPathForSelectedRow {
-            destionationVC.selectedCategory = categories[indexPath.row]
+            destionationVC.selectedCategory = categories?[indexPath.row]
         }
     }
     
@@ -73,10 +65,9 @@ class CategoryViewController: UITableViewController {
         
         
         let alertAction = UIAlertAction(title: "Add", style: .default) { action in
-            let category = CategoryCD(context: self.context)
-            category.name = alert.textFields?.first?.text!
-            self.categories.append(category)
-            self.saveData()
+            let category = Category()
+            category.name = alert.textFields!.first!.text!
+            self.save(category: category)
         }
         
         alert.addAction(alertAction)
@@ -84,15 +75,14 @@ class CategoryViewController: UITableViewController {
         return alert
     }
     
-    private func saveData() {
+    private func save(category: Category) {
         do {
-            try context.save()
+            try realm.write {
+                realm.add(category)
+            }
+            tableView.reloadData()
         } catch {
-            print("Could not save categories")
-        }
-        
-        DispatchQueue.main.async {
-            self.tableView.reloadData()
+            print("Failed to save categories")
         }
     }
 }

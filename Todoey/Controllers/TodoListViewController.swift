@@ -6,19 +6,18 @@
 //
 
 import UIKit
-import CoreData
+import RealmSwift
 
 class TodoListViewController: UITableViewController {
     
     @IBOutlet weak var searchBar: UISearchBar!
-    // Intermediary between the app and the persistant storage
-    private let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
-    private var itemArray = [Item]()
+
+    private let realm = try! Realm()
+    private var items: Results<Item>?
     
-    var selectedCategory: CategoryCD? {
+    var selectedCategory: Category? {
         didSet {
-            let predicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
-            loadItems(predicate: predicate)
+            loadItems()
         }
     }
     
@@ -30,39 +29,31 @@ class TodoListViewController: UITableViewController {
         searchBar.searchTextField.backgroundColor = .white
     }
     
-    private func loadItems(predicate: NSPredicate? = nil, sortDescriptors: [NSSortDescriptor]? = nil) {
-        let request: NSFetchRequest<Item> = Item.fetchRequest()
-        request.predicate = predicate
-        request.sortDescriptors = sortDescriptors
-        
-        do {
-            itemArray = try context.fetch(request)
-            
-        } catch {
-            print("Error fetching data from context")
-        }
+    private func loadItems() {
+        items = selectedCategory?.items.sorted(byKeyPath: "title", ascending: true)
     }
     
     // MARK: - Table view data source
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return itemArray.count
+        return items?.count ?? 0
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         
         let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
-        cell.textLabel?.text = itemArray[indexPath.row].title
-        cell.accessoryType = itemArray[indexPath.row].isDone ? .checkmark : .none
+        cell.textLabel?.text = items?[indexPath.row].title
+        cell.accessoryType = (items?[indexPath.row].isDone) ?? false ? .checkmark : .none
         cell.selectionStyle = .none
         return cell
         
     }
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        itemArray[indexPath.row].isDone.toggle()
+        try! realm.write {
+            items?[indexPath.row].isDone.toggle()
+        }
         tableView.reloadRows(at: [indexPath], with: .fade)
-        saveItems()
     }
     
     
@@ -78,26 +69,22 @@ class TodoListViewController: UITableViewController {
         }
         
         let action = UIAlertAction(title: "Add Item", style: .default) { action in
-            
-            let item = Item(context: self.context)
+            let item = Item()
             item.title = textField.text!
-            item.parentCategory = self.selectedCategory
-            
-            self.itemArray.append(item)
-            
-            // The app automatically persists data on the willTerminate AppDelegate method
-            self.saveItems()
-            
-            self.tableView.reloadData()
+            self.save(item: item)
         }
         
         alert.addAction(action)
         present(alert, animated: true)
     }
     
-    private func saveItems() {
+    private func save(item: Item) {
         do {
-            try context.save()
+            try realm.write {
+                realm.add(item)
+                self.selectedCategory?.items.append(item)
+            }
+            tableView.reloadData()
         } catch {
             print("Could not save data")
         }
@@ -106,14 +93,10 @@ class TodoListViewController: UITableViewController {
 
 extension TodoListViewController: UISearchBarDelegate {
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-        // [cd] means that is case and punctuation insensitive
-        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
-        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
-        let compoundPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [predicate, categoryPredicate])
+        items = items?
+            .filter("title CONTAINS[cd] %@", searchBar.text!)
+            .sorted(byKeyPath: "title", ascending: true)
         
-        let sortDescriptor = NSSortDescriptor(key: "title", ascending: true)
-        
-        loadItems(predicate: compoundPredicate, sortDescriptors: [sortDescriptor])
         tableView.reloadData()
     }
     
